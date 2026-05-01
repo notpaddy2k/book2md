@@ -82,7 +82,8 @@ def run_convert(args: argparse.Namespace) -> int:
 
     template_yaml = args.frontmatter.read_text(encoding="utf-8")
 
-    print(f"[1/5] Pandoc: {book.name} -> Markdown")
+    backend = "PyMuPDF4LLM" if book.suffix.lower() == ".pdf" else "Pandoc"
+    print(f"[1/5] {backend}: {book.name} -> Markdown")
     with tempfile.TemporaryDirectory() as tmp:
         work_dir = Path(tmp)
         md_path, media_dir = convert_to_markdown(book, work_dir)

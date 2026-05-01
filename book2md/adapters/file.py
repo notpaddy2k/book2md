@@ -1,6 +1,9 @@
 """
 File adapter: convert an EPUB or PDF into a single Markdown file plus a
-media directory using Pandoc, then extract metadata.
+media directory.
+
+- EPUB goes through Pandoc (preserves chapter headings cleanly).
+- PDF goes through PyMuPDF4LLM (Pandoc can't read PDF input).
 """
 from __future__ import annotations
 
@@ -24,15 +27,23 @@ def require_pandoc() -> None:
 
 
 def convert_to_markdown(book_path: Path, work_dir: Path) -> tuple[Path, Path]:
-    """Run Pandoc to produce a single Markdown file + media directory.
+    """Convert a book to a single Markdown file + media directory.
 
     Returns (markdown_path, media_dir).
     """
-    require_pandoc()
     work_dir.mkdir(parents=True, exist_ok=True)
+    suffix = book_path.suffix.lower()
+    if suffix == ".epub":
+        return _convert_epub(book_path, work_dir)
+    if suffix == ".pdf":
+        return _convert_pdf(book_path, work_dir)
+    raise ValueError(f"unsupported book format: {suffix}")
+
+
+def _convert_epub(book_path: Path, work_dir: Path) -> tuple[Path, Path]:
+    require_pandoc()
     media_dir = work_dir / "media"
     md_path = work_dir / "full.md"
-
     cmd = [
         PANDOC,
         "-t", "gfm-raw_html",
@@ -44,6 +55,30 @@ def convert_to_markdown(book_path: Path, work_dir: Path) -> tuple[Path, Path]:
     subprocess.run(cmd, check=True)
     return md_path, media_dir
 
+
+def _convert_pdf(book_path: Path, work_dir: Path) -> tuple[Path, Path]:
+    try:
+        import pymupdf4llm
+    except ImportError as e:
+        raise RuntimeError(
+            "PDF conversion needs pymupdf4llm. Run `pip install pymupdf4llm`."
+        ) from e
+
+    media_dir = work_dir / "media"
+    media_dir.mkdir(parents=True, exist_ok=True)
+    md_path = work_dir / "full.md"
+
+    md_text = pymupdf4llm.to_markdown(
+        str(book_path),
+        write_images=True,
+        image_path=str(media_dir),
+        image_format="png",
+    )
+    md_path.write_text(md_text, encoding="utf-8")
+    return md_path, media_dir
+
+
+# ----- metadata -----
 
 def read_epub_metadata(epub_path: Path) -> BookMetadata:
     """Parse OPF metadata from an EPUB without external deps."""
@@ -76,6 +111,26 @@ def read_epub_metadata(epub_path: Path) -> BookMetadata:
     return meta
 
 
+def read_pdf_metadata(pdf_path: Path) -> BookMetadata:
+    """Pull title/author from PDF info dict via PyMuPDF."""
+    meta = BookMetadata()
+    try:
+        import pymupdf  # PyMuPDF
+    except ImportError:
+        return meta
+    try:
+        with pymupdf.open(pdf_path) as doc:
+            info = doc.metadata or {}
+        if info.get("title"):
+            meta.title = info["title"].strip()
+        if info.get("author"):
+            # PDFs typically pack multiple authors as a single string.
+            meta.authors = [a.strip() for a in info["author"].split(",") if a.strip()]
+    except Exception:
+        pass
+    return meta
+
+
 def _find_opf(z: zipfile.ZipFile) -> str | None:
     """Locate the OPF file inside an EPUB via META-INF/container.xml."""
     try:
@@ -91,9 +146,13 @@ def _find_opf(z: zipfile.ZipFile) -> str | None:
 
 
 def read_metadata(book_path: Path) -> BookMetadata:
-    """Dispatch by extension. PDFs return mostly-empty metadata for now."""
     suffix = book_path.suffix.lower()
     if suffix == ".epub":
-        return read_epub_metadata(book_path)
-    # PDF metadata via pikepdf or pdfminer would go here in v0.2+
-    return BookMetadata(title=book_path.stem.replace("_", " "))
+        m = read_epub_metadata(book_path)
+    elif suffix == ".pdf":
+        m = read_pdf_metadata(book_path)
+    else:
+        m = BookMetadata()
+    if not m.title:
+        m.title = book_path.stem.replace("_", " ")
+    return m

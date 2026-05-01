@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 authors = [{ name = "simphani2k" }]
 dependencies = [
     "pyyaml>=6.0",
-    "ebooklib>=0.18",
+    "pymupdf4llm>=0.0.17",
 ]
 
 [project.optional-dependencies]
