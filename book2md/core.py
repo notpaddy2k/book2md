@@ -88,6 +88,39 @@ def split_chapters(markdown: str, heading_level: int) -> list[Chapter]:
     return chapters
 
 
+def split_chapters_by_pattern(markdown: str, pattern: re.Pattern[str]) -> list[Chapter]:
+    """Split a markdown blob at any line matching the regex.
+
+    Useful for messy PDFs where heading levels are unreliable but chapter
+    titles share a recognisable shape (e.g. all-caps headings, or numbered
+    chapters like 'Chapter 4 ...').
+
+    The matched line is treated as the chapter title; markdown heading
+    markers (`#`) are stripped from the extracted title.
+    """
+    lines = markdown.splitlines()
+    indices = [i for i, ln in enumerate(lines) if pattern.match(ln)]
+    if not indices:
+        return []
+
+    chapters: list[Chapter] = []
+    for i, start in enumerate(indices):
+        end = indices[i + 1] if i + 1 < len(indices) else len(lines)
+        body = "\n".join(lines[start:end]).rstrip() + "\n"
+        title = lines[start].lstrip("#").strip()
+        chapters.append(Chapter(title=title, body=body))
+    return chapters
+
+
+# Common preset patterns for `--chapter-pattern` shorthand.
+CHAPTER_PATTERNS: dict[str, str] = {
+    # All-caps heading at any heading level (e.g. ## LIVING A PURPOSEFUL LIFE)
+    "caps": r"^#+\s+[A-Z][A-Z0-9\s\-,'’.!?&]+\s*$",
+    # "Chapter N ..." or "Chapter N: ..." regardless of heading level
+    "numbered": r"^#+\s+(?:Chapter|CHAPTER|Part|PART)\s+\d+",
+}
+
+
 # ----- filtering -----
 
 def apply_excludes(chapters: list[Chapter], patterns: list[str]) -> list[Chapter]:

@@ -1,14 +1,17 @@
+import re
 from datetime import date
 
 import pytest
 
 from book2md.core import (
+    CHAPTER_PATTERNS,
     BookMetadata,
     Chapter,
     apply_excludes,
     append_next_links,
     render_frontmatter,
     split_chapters,
+    split_chapters_by_pattern,
 )
 
 
@@ -63,3 +66,29 @@ def test_render_frontmatter_fills_date():
     meta = BookMetadata()
     rendered = render_frontmatter(template, meta)
     assert date.today().isoformat() in rendered
+
+
+def test_split_by_pattern_caps_only():
+    md = (
+        "## first edition\n\nfront matter\n\n"
+        "## LIVING A PURPOSEFUL LIFE\n\nbody one\n\n"
+        "## **Q: a question?**\n\nq body\n\n"
+        "## FIGHT FOR THE FUTURE\n\nbody two\n"
+    )
+    pattern = re.compile(CHAPTER_PATTERNS["caps"])
+    chapters = split_chapters_by_pattern(md, pattern)
+    assert [c.title for c in chapters] == ["LIVING A PURPOSEFUL LIFE", "FIGHT FOR THE FUTURE"]
+    # Q&A and lowercase headings stay in the previous chapter's body, not as new chapters
+    assert "a question" in chapters[0].body
+
+
+def test_split_by_pattern_numbered():
+    md = "# Chapter 1 Intro\n\na\n# Chapter 2 Body\n\nb\n# Appendix\n\nc\n"
+    pattern = re.compile(CHAPTER_PATTERNS["numbered"])
+    chapters = split_chapters_by_pattern(md, pattern)
+    assert [c.title for c in chapters] == ["Chapter 1 Intro", "Chapter 2 Body"]
+
+
+def test_split_by_pattern_no_match():
+    pattern = re.compile(r"^## [A-Z]{20,}")
+    assert split_chapters_by_pattern("# normal\n\nbody\n", pattern) == []

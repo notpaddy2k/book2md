@@ -13,14 +13,17 @@ from pathlib import Path
 from book2md import __version__
 from book2md.adapters.file import convert_to_markdown, read_metadata
 from book2md.core import (
+    CHAPTER_PATTERNS,
     ConvertOptions,
     apply_excludes,
     append_next_links,
     render_frontmatter,
     rewrite_images,
     split_chapters,
+    split_chapters_by_pattern,
     write_chapter_notes,
 )
+import re
 
 
 DEFAULT_TEMPLATE = Path(__file__).parent / "templates" / "book.yml"
@@ -40,7 +43,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Where to put extracted images. Default: <out>/attachments.",
     )
-    conv.add_argument("--heading-level", type=int, default=1, help="Heading level to split on (default 1).")
+    conv.add_argument("--heading-level", type=int, default=1, help="Heading level to split on (default 1). Ignored if --chapter-pattern is set.")
+    conv.add_argument(
+        "--chapter-pattern",
+        default=None,
+        help=(
+            "Regex that identifies chapter heading lines. Overrides --heading-level. "
+            "Use a preset name ('caps', 'numbered') or any Python regex. "
+            "Example for an all-caps H2 chapter: '^## [A-Z][A-Z\\s]+$'."
+        ),
+    )
     conv.add_argument(
         "--frontmatter",
         type=Path,
@@ -93,10 +105,20 @@ def run_convert(args: argparse.Namespace) -> int:
 
         markdown = md_path.read_text(encoding="utf-8")
 
-        print(f"[2/5] Splitting at H{args.heading_level}")
-        chapters = split_chapters(markdown, args.heading_level)
+        if args.chapter_pattern:
+            raw = CHAPTER_PATTERNS.get(args.chapter_pattern, args.chapter_pattern)
+            print(f"[2/5] Splitting on pattern: {raw}")
+            try:
+                pattern = re.compile(raw, re.MULTILINE)
+            except re.error as e:
+                print(f"error: invalid --chapter-pattern: {e}", file=sys.stderr)
+                return 4
+            chapters = split_chapters_by_pattern(markdown, pattern)
+        else:
+            print(f"[2/5] Splitting at H{args.heading_level}")
+            chapters = split_chapters(markdown, args.heading_level)
         if not chapters:
-            print(f"error: no headings of level {args.heading_level} found", file=sys.stderr)
+            print("error: no chapter boundaries found", file=sys.stderr)
             return 3
 
         if args.exclude:
