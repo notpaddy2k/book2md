@@ -1,0 +1,13 @@
+# Default frontmatter template for chapter notes.
+# Values containing {{title}}, {{author}}, {{publisher}}, {{language}}, {{date}}
+# are filled from EPUB metadata. The `author` key special-cases to a YAML list
+# regardless of how many authors are present.
+categories:
+  - "[[Books]]"
+book: "{{title}}"
+author: "{{author}}"
+publisher: "{{publisher}}"
+language: "{{language}}"
+created: "{{date}}"
+tags:
+  - book-chapter

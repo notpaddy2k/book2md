@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "book2md"
+version = "0.1.0"
+description = "Convert EPUB and PDF books into clean Markdown chapters with frontmatter"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "simphani2k" }]
+dependencies = [
+    "pyyaml>=6.0",
+    "ebooklib>=0.18",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+book2md = "book2md.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["book2md*"]
